@@ -171,12 +171,30 @@ function escapeHtml(value) {
 /* Turn plain URLs into clickable links in chat messages */
 function linkifyText(text) {
   const escapedText = escapeHtml(text);
-  const urlPattern = /(https?:\/\/[^\s]+)/g;
 
-  return escapedText.replace(
-    urlPattern,
-    '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>',
+  /* Convert markdown links first: [label](https://example.com) */
+  const markdownLinkPattern = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+  const withMarkdownLinks = escapedText.replace(
+    markdownLinkPattern,
+    '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>',
   );
+
+  /* Then convert plain URLs while preserving already-created anchor tags */
+  const segments = withMarkdownLinks.split(/(<a [^>]+>.*?<\/a>)/g);
+  const urlPattern = /(https?:\/\/[^\s<]+)/g;
+
+  return segments
+    .map((segment) => {
+      if (segment.startsWith("<a ")) {
+        return segment;
+      }
+
+      return segment.replace(
+        urlPattern,
+        '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>',
+      );
+    })
+    .join("");
 }
 
 /* Create a formatted chat message and add it to the chat window */
@@ -192,31 +210,21 @@ function appendChatMessage(role, text, citations = []) {
   body.className = "chat-message-text";
   body.innerHTML = linkifyText(text);
 
+  if (citations.length > 0) {
+    const citationLinks = citations
+      .map(
+        (citation) =>
+          `<a href="${citation.url}" target="_blank" rel="noopener noreferrer">${escapeHtml(
+            citation.title || citation.url,
+          )}</a>`,
+      )
+      .join(" | ");
+
+    body.innerHTML += `<br><br><strong>Sources:</strong> ${citationLinks}`;
+  }
+
   wrapper.appendChild(label);
   wrapper.appendChild(body);
-
-  if (citations.length > 0) {
-    const sourcesTitle = document.createElement("p");
-    sourcesTitle.className = "chat-citations-title";
-    sourcesTitle.textContent = "Sources";
-
-    const sourcesList = document.createElement("ul");
-    sourcesList.className = "chat-citations-list";
-
-    citations.forEach((citation) => {
-      const item = document.createElement("li");
-      const link = document.createElement("a");
-      link.href = citation.url;
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
-      link.textContent = citation.title || citation.url;
-      item.appendChild(link);
-      sourcesList.appendChild(item);
-    });
-
-    wrapper.appendChild(sourcesTitle);
-    wrapper.appendChild(sourcesList);
-  }
 
   chatWindow.appendChild(wrapper);
 
